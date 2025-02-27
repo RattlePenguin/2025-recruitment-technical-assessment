@@ -99,41 +99,70 @@ def create_entry():
 # Endpoint that returns a summary of a recipe that corresponds to a query name
 @app.route('/summary', methods=['GET'])
 def summary():
-	data = request.get_json()
+	data = request.args
 	name = data.get('name', '')
+	
 	if name not in cookbook:
-		return 'A recipe with the corresponding name cannot be found.', 400
-
-	entry = cookbook[name]
-	type = entry.type
-	if type == "ingredient":
+		return 'A recipe with the corresponding name: ' + name + ' cannot be found.', 400
+	
+	entry = cookbook.get(name)
+	entry_type = entry.get('type')
+	if entry_type != "recipe":
 		return 'The searched name is NOT a recipe name (ie. an ingredient).', 400
 	
 	ingredients = []
-	# cookTime = calculateCookTime(name, ingredients)
+	cookTime = getCookTime(name, ingredients)
+	if cookTime == -1:
+		return 'Recipe contains items not in the cookbook', 400
 			
 	result = jsonify({
 		'name': name,
-		# 'cookTime': cookTime,
+		'cookTime': cookTime,
 		'ingredients': ingredients
 	})
-	return result, 500
+	return result, 200
 
-# def calculateCookTime(recipeName: str, ingredients: List) -> int:
-# 	entry = cookbook[recipeName]
-# 	# Parse requiredItems
+# Returns cookTime of recipe / ingredient, and adds ingredients to list
+def getCookTime(name: str, ingredients: List) -> int:
+	if name not in cookbook:
+		return -1
+	
+	entry = cookbook.get(name)
+	entry_type = entry.get('type')
 
-# 	if entry.type == "recipe":
-# 	for item in entry.requiredItems:
-# 		if item.name not in cookbook:
-# 			return 'The recipe contains recipes or ingredients that aren\'t in the cookbook.', 400
-# 		itemEntry = cookbook[item.name]
-# 		if itemEntry.type == "recipe":
+	if entry_type == "ingredient":
+		return entry.get('cookTime')
+	else:
+		cookTime = 0
+		for item in entry.get('requiredItems'):
+			itemCookTime = getCookTime(item.get('name'), ingredients)
+			if itemCookTime == -1:
+				return -1
+			cookTime += (item.get('quantity') * itemCookTime)
 			
-# 		else:
-# 			# ingredient
-			
+			# handle final ingredient list
+			if getType(item.get('name')) == "recipe":
+				continue
+			exists = False
+			for ingredient in ingredients:
+				if ingredient.get('name') == item.get('name'):
+					ingredient['quantity'] += item.get('quantity')
+					exists = True
+			if not exists:
+				ingredients.append({
+					'name': item.get('name'),
+					'quantity': item.get('quantity')
+				})
 
+	return cookTime
+
+def getType(name: str) -> str:
+	if name not in cookbook:
+		return None
+	elif cookbook.get(name).get('type') == "recipe":
+		return "recipe"
+	else:
+		return "ingredient"
 
 # =============================================================================
 # ==== DO NOT TOUCH ===========================================================
